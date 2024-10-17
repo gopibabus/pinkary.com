@@ -1,27 +1,57 @@
 services:
-    laravel.test:
+    pinkary-webserver:
+        image: pinkary-webserver
+        container_name: pinkary-webserver
         build:
-            context: ./vendor/laravel/sail/runtimes/8.3
-            dockerfile: Dockerfile
-            args:
-                WWWGROUP: '${WWWGROUP}'
-        image: sail-8.3/app
-        extra_hosts:
-            - 'host.docker.internal:host-gateway'
-        ports:
-            - '${APP_PORT:-80}:80'
-            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
-        environment:
-            WWWUSER: '${WWWUSER}'
-            LARAVEL_SAIL: 1
-            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
-            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
-            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+            context: .
+            dockerfile: docker/Dockerfile
+        env_file:
+            - docker/.docker.env
+        depends_on:
+            - pinkary-mail-server
+        links:
+            - pinkary-mail-server
         volumes:
-            - '.:/var/www/html'
+            - .:/var/www/html
+        ports:
+            - "${APP_HOST_PORT}:80"
         networks:
-            - sail
-        depends_on: {  }
+            - pinkary-network
+    pinkary-scheduler:
+        image: pinkary-scheduler
+        container_name: pinkary-scheduler
+        build:
+            context: .
+            dockerfile: docker/SchedulerDockerfile
+        depends_on:
+            - pinkary-mail-server
+            - pinkary-webserver
+        links:
+            - pinkary-mail-server
+            - pinkary-webserver
+        volumes:
+            - .:/var/www/html
+        networks:
+            - pinkary-network
+    pinkary-mail-server:
+        image: axllent/mailpit
+        container_name: pinkary-mail-server
+        restart: unless-stopped
+        volumes:
+            - pinkary-mail-data:/data
+        ports:
+            - "8026:8025"
+            - "1026:1025"
+        environment:
+            MP_MAX_MESSAGES: 5000
+            MP_DATABASE: /data/mailpit.db
+            MP_SMTP_AUTH_ACCEPT_ANY: 1
+            MP_SMTP_AUTH_ALLOW_INSECURE: 1
+        networks:
+            - pinkary-network
+volumes:
+    pinkary-mail-data:
+        driver: "local"
+
 networks:
-    sail:
-        driver: bridge
+    pinkary-network:
